@@ -85,12 +85,17 @@ export default function App() {
             if (drink === "Nominate") {
                 setPaused(true);
 
+                const originalDrinks = [...drinks];
+                setDrinks(drinks.filter(d => d !== "Nominate"));
+
                 setTimeout(() => {
                     setPaused(false);
                     spinDrink();
                 }, 4000);
 
+                setDrinks(originalDrinks); // restore after animation
                 setPopup(`${player}'s nominated player must drink: ${drink}`)
+                setPopup("")
             } else {
                 setPaused(true);
                 setPopup(`🎯 ${player} drinks: ${drink}`);
