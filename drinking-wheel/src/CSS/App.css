@@ -1,0 +1,24 @@
+/* src/App.css */
+
+/* Reset margins and paddings */
+html, body, #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* prevent scroll */
+    background: #000;  /* black background */
+    font-family: sans-serif;
+}
+
+/* Popup fade animation */
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translate(-50%, -60%); }
+    10%, 90% { opacity: 1; transform: translate(-50%, -50%); }
+    100% { opacity: 0; transform: translate(-50%, -40%); }
+}
+
+/* Button hover effect */
+button:hover {
+    transform: scale(1.05);
+}
