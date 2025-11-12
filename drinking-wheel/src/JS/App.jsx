@@ -8,12 +8,7 @@ export default function App() {
     // ---------- Game State ----------
     const [players, setPlayers] = useState(["Alice", "Bob", "Charlie", "Daisy"]);
     const [drinks, setDrinks] = useState([
-        "1 sip",
-        "2 sips",
-        "3 sips",
-        "Half drink",
-        "Full drink",
-        "Nominate",
+        "1 sip", "2 sips", "3 sips", "Half drink", "Full drink", "Nominate"
     ]);
     const [customFeatures, setCustomFeatures] = useState(baseFeatures);
     const [spinningPlayer, setSpinningPlayer] = useState(false);
@@ -26,10 +21,11 @@ export default function App() {
     const [rules, setRules] = useState([]);
     const addRule = (rule) => setRules([...rules, rule]);
 
-    // ---------- Modal visibility ----------
+    // ---------- Modal State ----------
     const [showPlayerModal, setShowPlayerModal] = useState(false);
     const [showDrinkModal, setShowDrinkModal] = useState(false);
     const [showFeatureModal, setShowFeatureModal] = useState(false);
+    const [showRuleModal, setShowRuleModal] = useState(false);
 
     // ---------- Modal Inputs ----------
     const [tempPlayerInput, setTempPlayerInput] = useState("");
@@ -38,12 +34,13 @@ export default function App() {
     const [tempFeatureMessage, setTempFeatureMessage] = useState("");
     const [tempFeatureDuration, setTempFeatureDuration] = useState(5);
     const [tempFeatureTargetPlayer, setTempFeatureTargetPlayer] = useState(players[0] || "");
-    const [tempFeatureTargetType, setTempFeatureTargetType] = useState("specific");
+    const [tempFeatureTargetType, setTempFeatureTargetType] = useState("all");
 
-    // ---------- Refs for feature interval ----------
-    const featuresRef = useRef(customFeatures);
-    const pausedRef = useRef(paused);
-    const pendingFeatureRef = useRef(null);
+    const [tempRuleText, setTempRuleText] = useState("");
+    const [ruleSetter, setRuleSetter] = useState("");
+
+    // ---------- Feature Queue ----------
+    const [featureQueue, setFeatureQueue] = useState([]);
 
     // ---------- Load from localStorage ----------
     useEffect(() => {
@@ -74,7 +71,7 @@ export default function App() {
         setTimeout(() => spinDrink(), 4200);
     };
 
-    // ---------- Auto Spin Every 20s (for testing) ----------
+    // ---------- Auto Spin ----------
     useEffect(() => {
         const timer = setInterval(() => {
             if (!paused) spinBoth();
@@ -82,64 +79,89 @@ export default function App() {
         return () => clearInterval(timer);
     }, [paused]);
 
-    // ---------- Handle player + drink popups ----------
+    // ---------- Handle Player + Drink Popups ----------
     useEffect(() => {
         if (player && drink) {
             if (drink === "Nominate") {
-                const otherPlayers = players.filter((p) => p !== player);
-                const nominated = otherPlayers[Math.floor(Math.random() * otherPlayers.length)];
                 setPaused(true);
-                setPopup(`${player} nominates ${nominated} to drink!`);
+
                 setTimeout(() => {
                     setPaused(false);
                     spinDrink();
                 }, 4000);
+
+                setPopup(`${player}'s nominated player must drink: ${drink}`)
             } else {
-                setPopup(`🎯 ${player} drinks: ${drink}`);
                 setPaused(true);
-                setTimeout(() => { setPopup(""); setPaused(false); }, 5000);
+                setPopup(`🎯 ${player} drinks: ${drink}`);
+                setTimeout(() => {
+                    setPopup("");
+                    setPaused(false);
+                }, 5000);
             }
         }
     }, [player, drink]);
 
-    // ---------- Feature Interval (fixed) ----------
-    useEffect(() => { featuresRef.current = customFeatures; }, [customFeatures]);
-    useEffect(() => { pausedRef.current = paused; }, [paused]);
-
+    // ---------- Feature Interval ----------
     useEffect(() => {
         const interval = setInterval(() => {
-            if (featuresRef.current.length === 0) return;
-            const randomIndex = Math.floor(Math.random() * featuresRef.current.length);
-            const feature = featuresRef.current[randomIndex];
-            if (!pausedRef.current) {
-                try {
-                    feature.effect({ setPopup, setPaused, addRule });
-                } catch (e) {
-                    console.error("Error in feature effect:", e);
-                }
-            } else {
-                pendingFeatureRef.current = feature;
+            if (!paused && featureQueue.length === 0 && customFeatures.length > 0) {
+                const randomFeature = customFeatures[Math.floor(Math.random() * customFeatures.length)];
+                setFeatureQueue([randomFeature]);
             }
-        }, 5000);
-
+        }, 90000);
         return () => clearInterval(interval);
-    }, []);
+    }, [paused, featureQueue, customFeatures]);
 
+    // ---------- Feature Queue Handler ----------
     useEffect(() => {
-        if (!paused && pendingFeatureRef.current) {
-            const feature = pendingFeatureRef.current;
-            pendingFeatureRef.current = null;
-            try {
-                feature.effect({ setPopup, setPaused, addRule });
-            } catch (e) {
-                console.error("Error in queued feature effect:", e);
-            }
+        if (featureQueue.length === 0) return;
+
+        const feature = featureQueue[0];
+
+        if (feature.id === "set-rule") {
+            const chosenPlayer = feature.targetType === "specific" ? feature.targetPlayer : players[Math.floor(Math.random() * players.length)];
+            setRuleSetter(chosenPlayer);
+            setTempRuleText("");
+            setPaused(true);
+            setShowRuleModal(true);
+        } else {
+            const handleTarget = () => {
+                if (feature.targetType === "specific") return feature.targetPlayer;
+                if (feature.targetType === "random") return players[Math.floor(Math.random() * players.length)];
+                return null; // "all"
+            };
+
+            const targetPlayer = handleTarget();
+
+            const message = targetPlayer ? `${targetPlayer}: ${feature.message}` : feature.message;
+
+            setPopup(message);
+            setTimeout(() => {
+                setPopup("");
+                setPaused(false);
+                setFeatureQueue([]);
+            }, feature.duration);
         }
-    }, [paused]);
+    }, [featureQueue]);
+
+    // ---------- Finish Feature ----------
+    const finishFeature = () => {
+        setPaused(false);
+        setFeatureQueue([]);
+    };
+
+    // ---------- Trigger Feature Manually ----------
+    const triggerFeature = (feature) => {
+        if (featureQueue.length === 0) {
+            setFeatureQueue([feature]);
+        }
+    };
 
     // ---------- Render ----------
     return (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100vw", height: "100vh", overflow: "hidden", position: "relative", background: "#000" }}>
+
             {/* Wheels */}
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "4vw", flexWrap: "wrap", flex: 1, width: "100%" }}>
                 <Wheel items={players} spinning={spinningPlayer} onFinish={setPlayer} label="Player" />
@@ -151,21 +173,23 @@ export default function App() {
                 🍻 Spin!
             </button>
 
-            {/* Rules */}
+            {/* Rules Panel */}
             <div style={{ position: "absolute", top: "20px", right: "40px", width: "10vw", background: "#111", color: "white", padding: "12px", borderRadius: "10px", maxHeight: "80vh", overflowY: "auto" }}>
                 <h3>Rules</h3>
                 {rules.length === 0 && <p>No rules yet</p>}
                 {rules.map((rule, index) => <div key={index} style={{ marginBottom: "5px" }}>{index + 1}. {rule}</div>)}
             </div>
 
-            {/* Menu */}
+            {/* Menu Button */}
             <button onClick={() => setShowMenu(!showMenu)} style={{ position: "absolute", top: "20px", left: "20px", padding: "10px 20px", background: "#ff3366", border: "none", borderRadius: "8px", color: "white", cursor: "pointer" }}>
                 ⚙️ Menu
             </button>
 
+            {/* Menu Panel */}
             {showMenu && (
                 <div style={{ position: "fixed", top: 0, left: 0, width: "300px", height: "100%", background: "#111", padding: "20px", overflowY: "auto", zIndex: 100 }}>
                     <h2 style={{ color: "white" }}>Settings</h2>
+
                     {/* Players */}
                     <h3 style={{ color: "white" }}>Players</h3>
                     <button onClick={() => setShowPlayerModal(true)} style={{ width: "100%", marginBottom: "10px" }}>Add Player</button>
@@ -196,7 +220,6 @@ export default function App() {
                         </div>
                     ))}
 
-                    {/* Close Menu */}
                     <button onClick={() => setShowMenu(false)} style={{ marginTop: "20px", background: "#ff3366", border: "none", padding: "10px 20px", borderRadius: "8px", color: "white", cursor: "pointer", width: "100%" }}>Close</button>
                 </div>
             )}
@@ -226,8 +249,9 @@ export default function App() {
                 <input placeholder="Message to show in popup" value={tempFeatureMessage} onChange={(e) => setTempFeatureMessage(e.target.value)} style={{ width: "100%", padding: "5px", marginBottom: "5px" }} />
                 <input type="number" placeholder="Duration (seconds)" value={tempFeatureDuration} onChange={(e) => setTempFeatureDuration(Number(e.target.value))} style={{ width: "100%", padding: "5px", marginBottom: "5px"}} />
                 <select value={tempFeatureTargetType} onChange={(e) => setTempFeatureTargetType(e.target.value)} style={{ width: "100%", padding: "5px", marginBottom: "5px" }}>
+                    <option value="all">Everyone</option>
                     <option value="specific">Specific Player</option>
-                    <option value="all">Everyone / No Specific Player</option>
+                    <option value="random">Random Player</option>
                 </select>
                 {tempFeatureTargetType === "specific" && (
                     <select value={tempFeatureTargetPlayer} onChange={(e) => setTempFeatureTargetPlayer(e.target.value)} style={{ width: "100%", padding: "5px", marginBottom: "5px" }}>
@@ -236,23 +260,14 @@ export default function App() {
                 )}
                 <button onClick={() => {
                     if (!tempFeatureName || !tempFeatureMessage) return;
-                    // Capture modal state into local variables
-                    const name = tempFeatureName;
-                    const message = tempFeatureMessage;
-                    const duration = tempFeatureDuration * 1000;
-                    const targetPlayer = tempFeatureTargetPlayer;
-                    const targetType = tempFeatureTargetType;
-
                     const newFeature = {
                         id: crypto.randomUUID(),
-                        name,
-                        duration,
-                        effect: ({ setPopup, setPaused }) => {
-                            setPaused(true);
-                            const displayMessage = targetType === "specific" ? `${targetPlayer}: ${message}` : message;
-                            setPopup(displayMessage);
-                            setTimeout(() => { setPopup(""); setPaused(false); }, duration);
-                        },
+                        name: tempFeatureName,
+                        message: tempFeatureMessage,
+                        duration: tempFeatureDuration * 1000,
+                        type: "popup",
+                        targetType: tempFeatureTargetType,
+                        targetPlayer: tempFeatureTargetPlayer
                     };
                     setCustomFeatures([...customFeatures, newFeature]);
                     setTempFeatureName(""); setTempFeatureMessage(""); setTempFeatureDuration(5);
@@ -260,6 +275,32 @@ export default function App() {
                     setShowFeatureModal(false);
                 }} style={{ width: "100%", padding: "8px", background: "#ff3366", color: "white", border: "none", borderRadius: "6px" }}>
                     Add Feature
+                </button>
+            </Modal>
+
+            {/* --- Set Rule Modal --- */}
+            <Modal visible={showRuleModal} onClose={() => { setShowRuleModal(false); finishFeature(); }}>
+                <h3>{ruleSetter}, add a new rule</h3>
+                <input
+                    autoFocus
+                    placeholder="Enter rule..."
+                    value={tempRuleText}
+                    onChange={(e) => setTempRuleText(e.target.value)}
+                    style={{ width: "100%", padding: "5px", marginBottom: "10px" }}
+                />
+                <button
+                    onClick={() => {
+                        if (tempRuleText.trim()) {
+                            addRule(tempRuleText.trim());
+                            setPopup(`👑 ${ruleSetter} added a new rule: ${tempRuleText}`);
+                            setTimeout(() => setPopup(""), 5000);
+                        }
+                        setShowRuleModal(false);
+                        finishFeature();
+                    }}
+                    style={{ width: "100%", padding: "8px", background: "#ff3366", color: "white", border: "none", borderRadius: "6px" }}
+                >
+                    Add Rule
                 </button>
             </Modal>
         </div>
